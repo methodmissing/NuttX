@@ -47,6 +47,9 @@
 
 #include "arm_internal.h"
 #include "imxrt_lpi2c.h"
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+#  include "imxrt_sema4.h"
+#endif
 #include "imxrt_edma.h"
 #include "imxrt_gpio.h"
 
@@ -160,6 +163,16 @@ struct imxrt_trace_s
   clock_t time;                /* First of event or first status */
 };
 
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+/* Gate number = LPI2C instance for the buses in the mask; the other core
+ * uses the same convention.
+ */
+
+#  define LPI2C_SEMA4_GATE(n) \
+     ((CONFIG_IMXRT_LPI2C_SEMA4_BUSES & (1 << ((n) - 1))) ? (n) : 0)
+#  define LPI2C_SEMA4_TIMEOUT_US 100000
+#endif
+
 /* I2C Device hardware configuration */
 
 struct imxrt_lpi2c_config_s
@@ -180,6 +193,9 @@ struct imxrt_lpi2c_config_s
 #endif
 #ifdef CONFIG_IMXRT_LPI2C_DMA
   uint32_t        dma_reqsrc;  /* DMA mux source */
+#endif
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  uint8_t sema4_gate;         /* SEMA4 gate shared with the other core, 0 = none */
 #endif
 };
 
@@ -347,6 +363,9 @@ static const struct imxrt_lpi2c_config_s imxrt_lpi2c1_config =
 #ifdef CONFIG_LPI2C1_DMA
   .dma_reqsrc    = IMXRT_DMACHAN_LPI2C1,
 #endif
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  .sema4_gate    = LPI2C_SEMA4_GATE(1),
+#endif
 };
 
 static struct imxrt_lpi2c_priv_s imxrt_lpi2c1_priv =
@@ -391,6 +410,9 @@ static const struct imxrt_lpi2c_config_s imxrt_lpi2c2_config =
 #endif
 #ifdef CONFIG_LPI2C2_DMA
   .dma_reqsrc    = IMXRT_DMACHAN_LPI2C2,
+#endif
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  .sema4_gate    = LPI2C_SEMA4_GATE(2),
 #endif
 };
 
@@ -437,6 +459,9 @@ static const struct imxrt_lpi2c_config_s imxrt_lpi2c3_config =
 #ifdef CONFIG_LPI2C3_DMA
   .dma_reqsrc    = IMXRT_DMACHAN_LPI2C3,
 #endif
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  .sema4_gate    = LPI2C_SEMA4_GATE(3),
+#endif
 };
 
 static struct imxrt_lpi2c_priv_s imxrt_lpi2c3_priv =
@@ -481,6 +506,9 @@ static const struct imxrt_lpi2c_config_s imxrt_lpi2c4_config =
 #endif
 #ifdef CONFIG_LPI2C4_DMA
   .dma_reqsrc    = IMXRT_DMACHAN_LPI2C4,
+#endif
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  .sema4_gate    = LPI2C_SEMA4_GATE(4),
 #endif
 };
 
@@ -1754,6 +1782,13 @@ static int imxrt_lpi2c_init(struct imxrt_lpi2c_priv_s *priv)
   imxrt_config_gpio(priv->config->scl_pin);
   imxrt_config_gpio(priv->config->sda_pin);
 
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  if (priv->config->sema4_gate != 0)
+    {
+      imxrt_sema4_init();
+    }
+#endif
+
   /* Enable power and reset the peripheral */
 
   imxrt_lpi2c_clock_enable(priv->config->base);
@@ -2142,6 +2177,21 @@ static int imxrt_lpi2c_transfer(struct i2c_master_s *dev,
       return ret;
     }
 
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  /* The other core drives this controller too */
+
+  if (priv->config->sema4_gate != 0)
+    {
+      ret = imxrt_sema4_lock(priv->config->sema4_gate,
+                             LPI2C_SEMA4_TIMEOUT_US);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&priv->lock);
+          return ret;
+        }
+    }
+#endif
+
   /* Clear any pending error interrupts */
 
   imxrt_lpi2c_putreg(priv, IMXRT_LPI2C_MSR_OFFSET, 0xffffffff);
@@ -2257,6 +2307,20 @@ static int imxrt_lpi2c_transfer(struct i2c_master_s *dev,
     }
 #endif
 
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  if (priv->config->sema4_gate != 0)
+    {
+      imxrt_sema4_unlock(priv->config->sema4_gate);
+    }
+#endif
+
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  if (priv->config->sema4_gate != 0)
+    {
+      imxrt_sema4_unlock(priv->config->sema4_gate);
+    }
+#endif
+
   nxmutex_unlock(&priv->lock);
   return ret;
 }
@@ -2299,6 +2363,19 @@ static int imxrt_lpi2c_reset(struct i2c_master_s *dev)
     {
       return ret;
     }
+
+#ifdef CONFIG_IMXRT_LPI2C_SEMA4
+  if (priv->config->sema4_gate != 0)
+    {
+      ret = imxrt_sema4_lock(priv->config->sema4_gate,
+                             LPI2C_SEMA4_TIMEOUT_US);
+      if (ret < 0)
+        {
+          nxmutex_unlock(&priv->lock);
+          return ret;
+        }
+    }
+#endif
 
   ret = -EIO;
 

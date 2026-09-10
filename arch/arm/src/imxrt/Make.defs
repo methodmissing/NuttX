@@ -74,6 +74,10 @@ ifeq ($(CONFIG_IMXRT_EDMA),y)
 CHIP_CSRCS += imxrt_edma.c
 endif
 
+ifeq ($(CONFIG_IMXRT_LPI2C_SEMA4),y)
+CHIP_CSRCS += imxrt_sema4.c
+endif
+
 ifeq ($(CONFIG_IMXRT_RPTUN),y)
 CHIP_CSRCS += imxrt_rptun.c
 endif

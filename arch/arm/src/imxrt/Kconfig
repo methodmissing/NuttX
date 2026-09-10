@@ -2731,6 +2731,20 @@ config IMXRT_LPI2C_DMA_MAXMSG
 		It is used to allocate space for the 16 bit LPI2C commands
 		that will be DMA-ed to the LPI2C device.
 
+config IMXRT_LPI2C_SEMA4
+	bool "Arbitrate LPI2C controllers with the other core over SEMA4"
+	default n
+	depends on IMXRT_LPI2C && ARCH_FAMILY_IMXRT117x
+	---help---
+		Take SEMA4 gate n around every transfer and bus reset on LPI2Cn
+		when the other core drives the same controller. That core must
+		take the same gate and leave the controller as it found it.
+
+config IMXRT_LPI2C_SEMA4_BUSES
+	hex "LPI2C instances gated by SEMA4 (bit n-1 for LPI2Cn)"
+	default 0x04
+	depends on IMXRT_LPI2C_SEMA4
+
 config IMXRT_LPI2C_DYNTIMEO
 	bool "Use dynamic timeouts"
 	default n

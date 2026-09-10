@@ -83,6 +83,10 @@ if(CONFIG_IMXRT_EDMA)
   list(APPEND SRCS imxrt_edma.c)
 endif()
 
+if(CONFIG_IMXRT_LPI2C_SEMA4)
+  list(APPEND SRCS imxrt_sema4.c)
+endif()
+
 if(CONFIG_IMXRT_RPTUN)
   list(APPEND SRCS imxrt_rptun.c)
 endif()
